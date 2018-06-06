@@ -1,4 +1,4 @@
-# Install script for directory: /home/lijun/workspace/opencvProjects/visualOdometry
+# Install script for directory: /home/lijunsun/workspace/coDevelop/visualOdometry
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -40,5 +40,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/lijun/workspace/opencvProjects/visualOdometry/build/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/lijunsun/workspace/coDevelop/visualOdometry/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

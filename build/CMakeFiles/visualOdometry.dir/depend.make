@@ -37,16 +37,6 @@ CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/openc
 CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/core/utility.hpp
 CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/core/version.hpp
 CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/core/vsx_utils.hpp
-CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/cudaarithm.hpp
-CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/cudabgsegm.hpp
-CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/cudacodec.hpp
-CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/cudafeatures2d.hpp
-CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/cudafilters.hpp
-CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/cudaimgproc.hpp
-CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/cudaobjdetect.hpp
-CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/cudaoptflow.hpp
-CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/cudastereo.hpp
-CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/cudawarping.hpp
 CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/dnn.hpp
 CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/dnn/dict.hpp
 CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/dnn/dnn.hpp
@@ -141,5 +131,10 @@ CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/openc
 CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/videostab/ring_buffer.hpp
 CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/videostab/stabilizer.hpp
 CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/videostab/wobble_suppression.hpp
+CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/viz.hpp
+CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/viz/types.hpp
+CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/viz/viz3d.hpp
+CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/viz/vizcore.hpp
+CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/viz/widgets.hpp
 CMakeFiles/visualOdometry.dir/src/visualOdometry.cpp.o: /usr/local/include/opencv2/xfeatures2d/cuda.hpp
 
