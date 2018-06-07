@@ -112,12 +112,12 @@ void parserCalib(string file_name , cv::Mat & Q){
     baselinePoint3 = P3.at<double>(0, 3) / (-f);
     baseline = baselinePoint3 - baselinePoint2;
 
-    // cout << "\ncx: " << cx << "\n"
-    // << "cy: " << cy << "\n"
-    // << "f: " << f << "\n"
-    // << "baselinePoint2: " << baselinePoint2 << "\n"
-    // << "baselinePoint3: " << baselinePoint3 << "\n"
-    // << "baseline: " << baseline << endl;
+    cout << "\ncx: " << cx << "\n"
+    << "cy: " << cy << "\n"
+    << "f: " << f << "\n"
+    << "baselinePoint2: " << baselinePoint2 << "\n"
+    << "baselinePoint3: " << baselinePoint3 << "\n"
+    << "baseline: " << baseline << endl;
 
     // Build the reprojection matrix Q.
     Q = cv::Mat::eye(4, 4, CV_64F);
@@ -147,7 +147,8 @@ void matchFeatures(
     cv::Mat image_2,
     vector< cv::KeyPoint > & keypoints_1,
     vector< cv::KeyPoint > & keypoints_2, 
-    vector < cv::DMatch > & matches) {
+    vector < cv::DMatch > & matches
+) {
 
     cv::Mat image_out;
 
@@ -182,19 +183,19 @@ void matchFeatures(
     // << "\nmatches imgIdx: " << matches.at(0).imgIdx
     // << endl;
     // Display results.
-    cv::drawMatches(
-        image_1,
-        keypoints_1,
-        image_2,
-        keypoints_2,
-        matches,
-        image_out,
-        cv::Scalar::all(-1),
-        cv::Scalar::all(-1),
-        vector<char>(),
-        cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-    cv::imshow("ORB matches between the stereo images.", image_out);
-    if(cv::waitKey(50) == 27) exit(0);
+    // cv::drawMatches(
+    //     image_1,
+    //     keypoints_1,
+    //     image_2,
+    //     keypoints_2,
+    //     matches,
+    //     image_out,
+    //     cv::Scalar::all(-1),
+    //     cv::Scalar::all(-1),
+    //     vector<char>(),
+    //     cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+    // cv::imshow("ORB matches between the stereo images.", image_out);
+    // if(cv::waitKey(50) == 27) exit(0);
 
 } // End of matchFeatures.
 
@@ -212,7 +213,8 @@ void triangulateStereo(
     string image_2_name,
     cv::Mat Q,
     cv::Mat & image_1,
-    cv::Mat & image_3D){
+    cv::Mat & image_3D
+){
 
     // cout << "triangulateStereo" << endl;
 
@@ -223,33 +225,68 @@ void triangulateStereo(
     // Step 1: Disparity.
     //         using the stero correspondence.
     //
+    // cv::Ptr<cv::StereoSGBM> stereo = cv::StereoSGBM::create(
+    //     -64, 128, 11, 0, 0, 12, 
+    //     0, 15, 1000, 16,
+    //     cv::StereoSGBM::MODE_SGBM // cv::StereoSGBM::MODE_HH
+    // );
+    //
     cv::Ptr<cv::StereoSGBM> stereo = cv::StereoSGBM::create(
-        -64, 128, 11, 0, 0, 12, 
-        0, 15, 1000, 16,
-        cv::StereoSGBM::MODE_SGBM // cv::StereoSGBM::MODE_HH
+        0, // minDisparity
+        128, // numDisparities
+        11, // blockSize
+        0, // P1
+        0, // P2
+           // Leave P1 and P2 as zeros and make the implementation 
+           // compute some optimal values for them based on the image
+           // resolution and blockSize.
+        0, // disp12MaxDiff
+        0, // preFilterCap
+        10, // uniquessRatio, typical values: 5 ~ 15.
+            // speckleWindowSize and speckleRange work together.
+        11, // speckleWindowSize, the size of any small, isolated blobs 
+            // that are substantially different from their surrounding values.
+        2,  // speckleRange, the largest difference between disparities
+            // that will include in the same blob.
+            // This value is compared directly to the values of the disparity,
+            // then this value will, in effect, be multiplied by 16.
+        cv::StereoSGBM::MODE_SGBM // mode
     );
+    
     // 
     cv::Mat disparity, vdisparity;
     stereo->compute(image_1, image_2, disparity);
-    // cout << disparity << endl;
+    // cout << "disparity1: " <<  disparity.at<double>(0, 0) << endl;
+    // cout << "disparity2: " <<  disparity.at<double>(300, 100) << endl;
+    // cout << "disparity: " << disparity << endl;
     // This is for displaying the disparity image only.
     cv::normalize(disparity, vdisparity, 0, 256, cv::NORM_MINMAX, CV_8U);
     cv::imshow("Disparity_map", vdisparity);
-    cv::moveWindow("Disparity_map", 0, 0);
+    cv::moveWindow("Disparity_map", 670, 0);
 
     // Step 2: Depth map.
     cv::reprojectImageTo3D(
         disparity,
         image_3D,
         Q,
-        false,
+        true,
         -1
     );
-    // cout << "\nimage_3D: \n" << image_3D << endl;
-    cv::imshow("Depth_map", image_3D);
-    cv::moveWindow("Depth_map", 0, vdisparity.size().height + 60);
 
-    if(cv::waitKey(1) == 27) exit(0);
+    // Outliers removal.
+    // for(int row = 0; row < disparity.size().height; row++){
+    //     for(int col = 0; col < disparity.size().width; col++){
+    //         if(disparity.at<double>(row, col) < 0){
+    //             image_3D.at<cv::Vec3f>(row, col)(2) = 10000;
+    //         }
+    //     }
+    // }
+
+    // cout << "\nimage_3D: \n" << image_3D << endl;
+    // cv::imshow("Depth_map", image_3D);
+    // cv::moveWindow("Depth_map", 660, vdisparity.size().height + 60);
+
+    // if(cv::waitKey(1) == 27) exit(0);
 
 } // END OF triangulateStereo().
 
@@ -263,7 +300,8 @@ void triangulateStereo(
 void get3Dkeypoints(
     vector< cv::KeyPoint > keypoints,
     cv::Mat image_3D,
-    vector< cv::Vec3f > & keypoints3D){
+    vector< cv::Vec3f > & keypoints3D
+){
     
     cv::Vec3f point3D;
     for(size_t ix = 0; ix < keypoints.size(); ix++){
@@ -285,7 +323,8 @@ void get3Dkeypoints(
 void sortKeypoints3D(
     vector< cv::Vec3f > keypoints3D_former, 
     vector< cv::Vec3f > & keypoints3D_new,
-    vector < cv::DMatch > matches){
+    vector < cv::DMatch > matches
+){
 
     vector< cv::Vec3f > keypoints3D_temp;
     for(size_t ix = 0; ix < matches.size(); ix++){
@@ -301,6 +340,36 @@ void sortKeypoints3D(
 } // END OF sortKeypoints3D().
 
 
+/**
+ * Filter out the outliers whose depth value equals to 10000.
+ */
+void filter3DPoints(
+    vector< cv::Vec3f > & keypoints3D_former,
+    vector< cv::Vec3f > & keypoints3D_new
+){
+
+    // cout << "Before: " << keypoints3D_former.size() << endl;
+
+    for(vector< cv::Vec3f >::iterator iter_former = keypoints3D_former.begin(), iter_new = keypoints3D_new.begin(); 
+        iter_former < keypoints3D_former.end() || iter_new < keypoints3D_new.end();
+        iter_former++, iter_new++){
+
+        if ((*iter_former)(2) == 10000 || (*iter_new)(2) == 10000){
+            // cout << "iter_former: " << *iter_former << endl;
+            // cout << "iter_new: " << *iter_new << endl;
+            keypoints3D_former.erase(iter_former);
+            keypoints3D_new.erase(iter_new);
+            iter_former--;
+            iter_new--;
+        } // END OF if ((*iter_former)(2) == 10000 || (*iter_new)(2) == 10000).
+
+    } // END OF for();
+
+    // cout << "After: " << keypoints3D_former.size() << endl;
+
+} // END OF filter3DPoints().
+
+
 void getRelativeTransform(
     vector< cv::KeyPoint > keypoints_former,
     vector< cv::KeyPoint > keypoints_new,
@@ -310,6 +379,8 @@ void getRelativeTransform(
     cv::Mat & R_relative,
     cv::Mat & t_relative
 ){
+
+    //    
     R_relative = cv::Mat::eye(3, 3, CV_64F);
     t_relative = cv::Mat::zeros(3, 1, CV_64F);
     // cout << "\nR_relative: \n" << R_relative
@@ -318,13 +389,59 @@ void getRelativeTransform(
     vector< cv::Vec3f > keypoints3D_former, keypoints3D_new;
     get3Dkeypoints(keypoints_former, image_3D_former, keypoints3D_former);
     get3Dkeypoints(keypoints_new, image_3D_new, keypoints3D_new);
+    
     // Sort keypoints3D_former and keypoints3D_new in the order
     // according to matches.
+    //
     sortKeypoints3D(keypoints3D_former, keypoints3D_new, matches);
-
     
+    // Filter out the outliers with depth value equal to 10000.
+    //
+    filter3DPoints(keypoints3D_former, keypoints3D_new);
+
+    // Calculate the relative 3D affine transformation.
+    //
+    cv::Mat affine_relative_3D;
+    cv::estimateAffine3D(keypoints3D_former, keypoints3D_new, affine_relative_3D, cv::noArray());
+    // cout << "\naffine_relative_3D: \n" << affine_relative_3D << endl;
+    R_relative = affine_relative_3D.colRange(0, 3);
+    t_relative = affine_relative_3D.col(3);
+    // cout << "\nR_relative: \n" << R_relative
+    // cout << "\nt_relative: \n" << t_relative
+    // << endl;
 
 }
+
+
+/**
+ * @param Rs, the collection of the total rotation matrix to the reference.
+ * @param ts, the collection of the total translation matrix to the reference.
+ */
+void visualizeTrajectory(cv::Mat trajectory, vector< cv::Mat > Rs, vector< cv::Mat > ts){
+   
+    // trajectory: Horizontal: x; Vertical: z.  
+    cv::Point pose_current;
+    //
+    cv::Mat R, t;
+    for(size_t ix = 0; ix < Rs.size(); ix++){
+        R = Rs[ix];
+        t = ts[ix];
+
+        pose_current = cv::Point(t.at<double>(0) + 300, t.at<double>(2) + 100);
+        cv::circle(trajectory, pose_current, 1, cv::Scalar(0, 0, 255), 1, CV_FILLED);
+        
+        // cout << "Show trajectory" << endl;
+        cv::imshow("trajectory", trajectory);
+        cv::moveWindow("trajectory", 0, 0);
+        if(cv::waitKey(1) == 27){
+            cv::imwrite("trajectory.jpg", trajectory);
+            exit(0);
+        }
+    } // END OF for(size_t ix = 0; ix < Rs.size(); ix++).
+
+} // END OF visualizeTrajectory().
+
+
 
 /**
  * @param dir_name, the name of the directory containing the
@@ -332,14 +449,15 @@ void getRelativeTransform(
  * @param Q, the 4x4 reprojection matrix, which maps the 2-D coordiantes
  *           withe the disparity (x, y, d) to the 3-D 3-D coordinates 
  *           in the physical world (X/W, Y/W, Z/W).
- * @param Rs, the collection of the rotation matrix.
- * @param ts, the collection of the translation matrix.
+ * @param Rs, the collection of the total rotation matrix to the reference.
+ * @param ts, the collection of the total translation matrix to the reference.
  */
 void getTrajectory(
     string dir_name,
     cv::Mat Q,
     vector< cv::Mat > & Rs,
-    vector< cv::Mat > & ts){
+    vector< cv::Mat > & ts
+){
 
     // Open the stereo left and right RECTIFIED images files and check.
     // image_1 correspond to the left RECTIFIED stereo image.
@@ -372,12 +490,21 @@ void getTrajectory(
     image_1_name =  dir_name + "/sequences/00/" + image_1_name;
 
     getline(image_2_names, image_2_name);
-    image_2_name = dir_name + "sequences/00/" +   image_2_name;
+    image_2_name = dir_name + "/sequences/00/" +   image_2_name;
 
     triangulateStereo(image_1_name, image_2_name, Q, image_1_former, image_3D_former);
+    cout << "Image size: " << image_1_former.size() << endl;
 
-    // Get the relative transformation between frames.
+    // Get the total transformation with respect to the reference.
     // 
+    cv::Mat R_total, t_total;
+    cv::Mat R_relative_former = cv::Mat::eye(3, 3, CV_64F);
+    cv::Mat t_relative_former = cv::Mat::zeros(3, 1, CV_64F);
+    cv::Mat R_relative_new, t_relative_new;
+    
+    // trajectory: Horizontal: x; Vertical: z.
+    cv::Mat trajectory = cv::Mat::zeros(600, 600, CV_8UC3); 
+
     while(getline(image_1_names, image_1_name)){
 
         // Obtain the aboslute data path from the relative path.
@@ -395,26 +522,57 @@ void getTrajectory(
 
         // Calculate the relatvie transformation between the former and the new frames.
         //
-        cv::Mat R_relative, t_relative;
+        
         getRelativeTransform(
             keypoints_former, 
             keypoints_new, 
             matches, 
             image_3D_former, 
             image_3D_new,
-            R_relative, 
-            t_relative);
+            R_relative_new, 
+            t_relative_new);
+        
+        // Obtain the total transformation from the relative transformation.
+        //
+        R_total = R_relative_new * R_relative_former;
+        // t_total = R_relative_new * t_relative_former + t_relative_new;
+        t_total = t_relative_former + t_relative_new;
+        // cout << "\nR_relative_former: \n" << R_relative_former << endl;
+        // cout << "R_relative_new: \n" << R_relative_new << endl;
+        // cout << "R_total: \n" << R_total << endl;
+        // cout << "t_relative_former: \n" << t_relative_former << endl;
+        cout << "t_relative_new: \n" << t_relative_new << endl;
+        cout << "t_total: \n" << t_total << endl;
+        
+        // Save.
+        //
+        Rs.push_back(R_total);
+        ts.push_back(t_total);
 
+        // Visualize the trajectory.
+        //
+        visualizeTrajectory(trajectory, Rs, ts);
 
         // Update.
-        image_1_former = image_1_new;
-        image_3D_former = image_3D_new;
+        //
+        // cout << "image_1_former: \n" << image_1_former.at<double>(0, 0) << endl;
+        // cout << "image_1_new: \n" << image_1_new.at<double>(0, 0) << endl;  
+        // cout << "image_3D_former: " << image_3D_former.at<cv::Vec3f>(100, 100) << endl;
+        // cout << "image_3D_new: " << image_3D_new.at<cv::Vec3f>(100, 100) << endl;
+        image_1_former = image_1_new.clone();
+        image_3D_former = image_3D_new.clone();
+        R_relative_former = R_relative_new.clone();
+        t_relative_former = t_relative_new.clone();
 
     } // END OF while(getline(image_1_names, image_1_name)).
 
+    // Save the trajectory.
+    //
+    cv::imwrite("trajectory.jpg", trajectory);
+
+} // END OF getTrajectory().
 
 
-}
 
 
 
@@ -434,17 +592,15 @@ int main(int argc, char* argv[]){
     // Reprojection matrix Q.
     cv::Mat Q;
     parserCalib(file_name, Q);
-    
 
-    // Obtain the relative affine transformation (R | t)
-    // between the former and the latter frames.
-    //
-    vector< cv::Mat > R, t;
-
+    // Get the trajectory.
+    vector< cv::Mat > Rs, ts;
     getTrajectory(
         dir_name, 
         Q,
-        R, t);
+        Rs, 
+        ts);
+
 
     // Over.
     cv::destroyAllWindows();
