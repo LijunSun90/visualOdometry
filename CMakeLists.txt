@@ -6,6 +6,7 @@ project( visualOdometry )
 set(OpenCV_DIR /usr/local/share/OpenCV)
 
 find_package( OpenCV 3.4.1 REQUIRED )
+#find_package(cvsba REQUIRED )
 
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 
