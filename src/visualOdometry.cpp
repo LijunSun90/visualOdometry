@@ -594,7 +594,8 @@ void getTrajectory(
         // Obtain the total transformation from the relative transformation.
         //
         R_total = R_relative_new * R_total;
-        t_total = R_relative_new * t_total + t_relative_new;
+        t_total = R_relative_new * t_total + t_relative_new;  
+
         // t_total = t_total + t_relative_new;
         // cout << "\nR_relative_former: \n" << R_relative_former << endl;
         // cout << "R_relative_new: \n" << R_relative_new << endl;
