@@ -76,28 +76,29 @@ void parserCalib(string file_name , cv::Mat & Q){
     linestream.clear();
     linestream.str(lines);
     linestream >> entry;
-    // cout << entry << endl;
+    cout << entry << endl;
     for(int row = 0; row < 3; row++){
         for(int col = 0; col < 4; col++){
             linestream >> entry;
             P2.at<double>(row, col) = atof(entry.c_str());
         }
     }
-    // cout << P2 << endl;
+    cout << P2 << endl;
     // P3. 3 represents the right color camera.
     //
     getline(loaded_projection_matrices, lines);
     linestream.clear();
     linestream.str(lines);
     linestream >> entry;
-    // cout << entry << endl;
+    cout << entry << endl;
     for(int row = 0; row < 3; row++){
         for(int col = 0; col < 4; col++){
             linestream >> entry;
             P3.at<double>(row, col) = atof(entry.c_str());
         }
     }
-    // cout << P3 << endl;
+    cout << P3 << endl;
+    // cout << "P3.type(): " << P3.type() << endl;    
     //
     // Get the camera intrinsics (cx, cy, f)
     // and the extrinsics tx in (tx, ty, tz).
@@ -125,9 +126,9 @@ void parserCalib(string file_name , cv::Mat & Q){
     Q.at<double>(1, 3) = -cy;
     Q.at<double>(2, 3) = f;
     Q.at<double>(3, 3) = 0;
-    Q.at<double>(3, 2) = -1/f;
+    Q.at<double>(3, 2) = -1/baseline;
 
-    cout << "\nQ: \n" << Q << endl;
+    cout << "\nQ: \n" << Q << "\n" << endl;
 
 } // END OF void parserCalib().
 
@@ -233,58 +234,78 @@ void triangulateStereo(
     //
     cv::Ptr<cv::StereoSGBM> stereo = cv::StereoSGBM::create(
         0, // minDisparity
-        128, // numDisparities
-        11, // blockSize
+        128, // numDisparities, total number of distinct possible disparities
+             // to be returned. 
+        5, // blockSize, usually 3 or 5 would be enough. Always be odd.
+            // the larger the value is, the fewer false matches you 
+            // are likely to find. However, not only the computational
+            // cost scale with the area of the window, but it implicitly
+            // assume that the disparity is actually the same over the
+            // area of the windlow. Also, with larger blockSize, it is
+            // likely to get vaguer depth maps.
         0, // P1
         0, // P2
            // Leave P1 and P2 as zeros and make the implementation 
            // compute some optimal values for them based on the image
            // resolution and blockSize.
         0, // disp12MaxDiff
-        0, // preFilterCap
-        10, // uniquessRatio, typical values: 5 ~ 15.
+        0, // preFilterCap, a positive numeric limit.
+        15, // uniquessRatio, typical values: 5 ~ 15.
             // speckleWindowSize and speckleRange work together.
-        11, // speckleWindowSize, the size of any small, isolated blobs 
+        21, // speckleWindowSize, the size of any small, isolated blobs 
             // that are substantially different from their surrounding values.
         2,  // speckleRange, the largest difference between disparities
             // that will include in the same blob.
             // This value is compared directly to the values of the disparity,
             // then this value will, in effect, be multiplied by 16.
+            // Typically, a small number, 1 or 2 work most of the time,
+            // though values as large as 4 are not uncommon.
         cv::StereoSGBM::MODE_SGBM // mode
+                                  // the five-directional version.
     );
     
     // 
-    cv::Mat disparity, vdisparity;
+    cv::Mat disparity, vdisparity, disparity_true;
+    // Output 16-bit fixed-point disparity map.
+    //
     stereo->compute(image_1, image_2, disparity);
     // cout << "disparity1: " <<  disparity.at<double>(0, 0) << endl;
     // cout << "disparity2: " <<  disparity.at<double>(300, 100) << endl;
     // cout << "disparity: " << disparity << endl;
+
+    //Get the true disparity values.
+    // cout << "disparity type: " << disparity.type() << endl;
+    disparity.convertTo(disparity_true, CV_32F, 1.0/16.0, 0.0);
+
     // This is for displaying the disparity image only.
-    cv::normalize(disparity, vdisparity, 0, 256, cv::NORM_MINMAX, CV_8U);
-    cv::imshow("Disparity_map", vdisparity);
-    cv::moveWindow("Disparity_map", 670, 0);
+    // cv::normalize(disparity_true, vdisparity, 0, 256, cv::NORM_MINMAX, CV_8U);
+    // cv::imshow("Disparity_map", vdisparity);
+    // cv::moveWindow("Disparity_map", 670, 0);
 
     // Step 2: Depth map.
     cv::reprojectImageTo3D(
-        disparity,
+        disparity_true,
         image_3D,
         Q,
         true,
         -1
     );
 
-    // Outliers removal.
-    // for(int row = 0; row < disparity.size().height; row++){
-    //     for(int col = 0; col < disparity.size().width; col++){
-    //         if(disparity.at<double>(row, col) < 0){
-    //             image_3D.at<cv::Vec3f>(row, col)(2) = 10000;
-    //         }
-    //     }
-    // }
-
-    // cout << "\nimage_3D: \n" << image_3D << endl;
-    // cv::imshow("Depth_map", image_3D);
-    // cv::moveWindow("Depth_map", 660, vdisparity.size().height + 60);
+    // Mark the outliers.
+    double count = 0;
+    for(int row = 0; row < disparity_true.size().height; row++){
+        for(int col = 0; col < disparity_true.size().width; col++){
+            if(disparity_true.at<double>(row, col) < 0){
+                // cout << "Original outlier depth: "
+                // << image_3D.at<cv::Vec3f>(row, col)(2) << endl;
+                image_3D.at<cv::Vec3f>(row, col)(2) = 10000;
+                count++;
+            }
+        }
+    }
+    cout << "The ratio of negative disparities is: " 
+    << count/(disparity_true.rows * disparity_true.cols) 
+    << "\n" << endl;
 
     // if(cv::waitKey(1) == 27) exit(0);
 
@@ -325,6 +346,7 @@ void sortKeypoints3D(
     vector< cv::Vec3f > & keypoints3D_new,
     vector < cv::DMatch > matches
 ){
+    // cout << "keypoints3D_new Before: " << keypoints3D_new[30] << endl;
 
     vector< cv::Vec3f > keypoints3D_temp;
     for(size_t ix = 0; ix < matches.size(); ix++){
@@ -336,6 +358,8 @@ void sortKeypoints3D(
     // Update.
     //
     keypoints3D_new = keypoints3D_temp;
+    // cout << "keypoints3D_temp: " << keypoints3D_temp[30] << endl;
+    // cout << "keypoints3D_new: " << keypoints3D_new[30] << endl;
 
 } // END OF sortKeypoints3D().
 
@@ -380,12 +404,6 @@ void getRelativeTransform(
     cv::Mat & t_relative
 ){
 
-    //    
-    R_relative = cv::Mat::eye(3, 3, CV_64F);
-    t_relative = cv::Mat::zeros(3, 1, CV_64F);
-    // cout << "\nR_relative: \n" << R_relative
-    // << "\nt_relative: \n" << t_relative << endl;
-
     vector< cv::Vec3f > keypoints3D_former, keypoints3D_new;
     get3Dkeypoints(keypoints_former, image_3D_former, keypoints3D_former);
     get3Dkeypoints(keypoints_new, image_3D_new, keypoints3D_new);
@@ -398,6 +416,8 @@ void getRelativeTransform(
     // Filter out the outliers with depth value equal to 10000.
     //
     filter3DPoints(keypoints3D_former, keypoints3D_new);
+    cout << "\nThe effective keypoints pair is: " 
+    << keypoints3D_former.size() << endl;
 
     // Calculate the relative 3D affine transformation.
     //
@@ -417,7 +437,7 @@ void getRelativeTransform(
  * @param Rs, the collection of the total rotation matrix to the reference.
  * @param ts, the collection of the total translation matrix to the reference.
  */
-void visualizeTrajectory(cv::Mat trajectory, vector< cv::Mat > Rs, vector< cv::Mat > ts){
+void visualizeTrajectoryXZ(cv::Mat trajectory, vector< cv::Mat > Rs, vector< cv::Mat > ts){
    
     // trajectory: Horizontal: x; Vertical: z.  
     cv::Point pose_current;
@@ -459,6 +479,9 @@ void getTrajectory(
     vector< cv::Mat > & ts
 ){
 
+    cv::FileStorage fs("poses.xml", cv::FileStorage::WRITE);
+    int frame = 0;
+
     // Open the stereo left and right RECTIFIED images files and check.
     // image_1 correspond to the left RECTIFIED stereo image.
     // image_2 correspond to the right RECTIFIED stereo image.
@@ -497,15 +520,23 @@ void getTrajectory(
 
     // Get the total transformation with respect to the reference.
     // 
-    cv::Mat R_total, t_total;
-    cv::Mat R_relative_former = cv::Mat::eye(3, 3, CV_64F);
-    cv::Mat t_relative_former = cv::Mat::zeros(3, 1, CV_64F);
+    cv::Mat R_total = cv::Mat::eye(3, 3, CV_64F);
+    cv::Mat t_total = cv::Mat::zeros(3, 1, CV_64F);
     cv::Mat R_relative_new, t_relative_new;
+    cv::Mat affine_3D = cv::Mat::zeros(3, 4, CV_64F);
+    // Save.
+    R_total.copyTo(affine_3D.colRange(0, 3));
+    t_total.copyTo(affine_3D.col(3));
+    // cout << "R_total: \n" << R_total << endl;
+    // cout << "t_total: \n" << t_total << endl;
+    // cout << "affine_3D: \n" << affine_3D << endl;
+    fs << "frame" + to_string(frame) << affine_3D;
     
     // trajectory: Horizontal: x; Vertical: z.
     cv::Mat trajectory = cv::Mat::zeros(600, 600, CV_8UC3); 
 
     while(getline(image_1_names, image_1_name)){
+        frame++;
 
         // Obtain the aboslute data path from the relative path.
         image_1_name =  dir_name + "/sequences/00/" + image_1_name;
@@ -522,7 +553,6 @@ void getTrajectory(
 
         // Calculate the relatvie transformation between the former and the new frames.
         //
-        
         getRelativeTransform(
             keypoints_former, 
             keypoints_new, 
@@ -534,41 +564,46 @@ void getTrajectory(
         
         // Obtain the total transformation from the relative transformation.
         //
-        R_total = R_relative_new * R_relative_former;
-        // t_total = R_relative_new * t_relative_former + t_relative_new;
-        t_total = t_relative_former + t_relative_new;
+        R_total = R_relative_new * R_total;
+        t_total = R_relative_new * t_total + t_relative_new;
+        // t_total = t_relative_former + t_relative_new;
         // cout << "\nR_relative_former: \n" << R_relative_former << endl;
         // cout << "R_relative_new: \n" << R_relative_new << endl;
         // cout << "R_total: \n" << R_total << endl;
         // cout << "t_relative_former: \n" << t_relative_former << endl;
-        cout << "t_relative_new: \n" << t_relative_new << endl;
+        cout << "\nt_relative_new: \n" << t_relative_new << endl;
         cout << "t_total: \n" << t_total << endl;
         
         // Save.
         //
         Rs.push_back(R_total);
         ts.push_back(t_total);
+        // Save.
+        R_total.copyTo(affine_3D.colRange(0, 3));
+        t_total.copyTo(affine_3D.col(3));
+        // cout << "affine_3D: \n" << affine_3D << endl;
+        fs << "frame" + to_string(frame) << affine_3D;
 
         // Visualize the trajectory.
         //
-        visualizeTrajectory(trajectory, Rs, ts);
+        visualizeTrajectoryXZ(trajectory, Rs, ts);
 
         // Update.
         //
-        // cout << "image_1_former: \n" << image_1_former.at<double>(0, 0) << endl;
+        // cout << "\nimage_1_former: \n" << image_1_former.at<double>(0, 0) << endl;
         // cout << "image_1_new: \n" << image_1_new.at<double>(0, 0) << endl;  
-        // cout << "image_3D_former: " << image_3D_former.at<cv::Vec3f>(100, 100) << endl;
-        // cout << "image_3D_new: " << image_3D_new.at<cv::Vec3f>(100, 100) << endl;
+        // cout << "image_3D_former: " << image_3D_former.at<cv::Vec3f>(300, 100) << endl;
+        // cout << "image_3D_new: " << image_3D_new.at<cv::Vec3f>(300, 100) << endl;       
         image_1_former = image_1_new.clone();
         image_3D_former = image_3D_new.clone();
-        R_relative_former = R_relative_new.clone();
-        t_relative_former = t_relative_new.clone();
 
     } // END OF while(getline(image_1_names, image_1_name)).
 
     // Save the trajectory.
     //
     cv::imwrite("trajectory.jpg", trajectory);
+
+    fs.release();
 
 } // END OF getTrajectory().
 
@@ -601,6 +636,7 @@ int main(int argc, char* argv[]){
         Rs, 
         ts);
 
+    
 
     // Over.
     cv::destroyAllWindows();
