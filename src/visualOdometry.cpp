@@ -8,7 +8,7 @@
 #include <math.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/xfeatures2d.hpp>
-//#include <cvsba/cvsba.h>
+#include "ceres/ceres.h"
 
 using namespace std;
 
@@ -149,13 +149,26 @@ void calculateFeatures(
     //    
     // cv::Ptr<cv::Feature2D> f2d = cv::ORB::create(1500);
     // cv::Ptr<cv::Feature2D> f2d = cv::xfeatures2d::SIFT::create();
-    cv::Ptr<cv::Feature2D> f2d = cv::xfeatures2d::SURF::create();
+    // cv::Ptr<cv::Feature2D> f2d = cv::xfeatures2d::SURF::create();
     // cv::Ptr<cv::Feature2D> f2d = cv::BRISK::create();
 
     // Detect the keypoints & Extract descriptors.
-    f2d->detectAndCompute(image, cv::noArray(), keypoints, descriptors);
+    // f2d->detectAndCompute(image, cv::noArray(), keypoints, descriptors);
     // cout << "keypoints: " << keypoints.size() << endl;
     // cout << "descriptors: " << descriptors.type() << endl;
+
+    // cv::Ptr<cv::Feature2D> f2d = cv::FastFeatureDetector::create();
+    cv::Ptr<cv::Feature2D> f2d = cv::GFTTDetector::create(
+        1000,
+        0.01,
+        1.0,
+        3,
+        false);
+    f2d->detect(image, keypoints);
+    // cv::Ptr<cv::DescriptorExtractor> extractor = cv::ORB::create();
+    cv::Ptr<cv::DescriptorExtractor> extractor = cv::xfeatures2d::BriefDescriptorExtractor::create();
+    // cv::Ptr<cv::DescriptorExtractor> extractor = cv::xfeatures2d::FREAK::create();
+    extractor->compute(image, keypoints, descriptors);
 
     // Display.
     //
@@ -168,7 +181,8 @@ void calculateFeatures(
         cv::DrawMatchesFlags::DEFAULT);
     cv::imshow("The_left_image", image_out);
     cv::moveWindow("The_left_image", 0, 660);
-    // if(cv::waitKey(1) == 27) exit(-1);
+    // cv::imwrite("features.jpg", image_out);
+    // if(cv::waitKey(0) == 27) exit(0);
 
 }
 
@@ -206,6 +220,83 @@ void matchFeatures(
 } // End of matchFeatures.
 
 
+void calculateCorners(
+    cv::Mat image,
+    vector< cv::Point2f > & keypoints
+){
+
+    const int MAX_CORNERS = 4000;
+    cv::goodFeaturesToTrack(
+        image, // Image to track
+        keypoints, // Vector of detected corners (output)
+        MAX_CORNERS, // Keep up to this many corners
+        0.001, // Quality level (percent of maximum)
+        5, // Min distance between corners
+        cv::noArray(), // Mask,
+        3, // Block size
+        false, // true: Harris, false: Shi-Tomasi
+        0.04 // method specific parameter
+    );
+
+}
+
+
+void calculateOpticalFlow(
+    cv::Mat image_former,
+    cv::Mat image_new,
+    vector< cv::Point2f > & keypoints_former,
+    vector< cv::Point2f > & keypoints_new,
+    vector<uchar> & features_found
+){
+    if(keypoints_former.size() < 3000){
+        keypoints_former.clear();
+        calculateCorners(image_former, keypoints_former);
+    }
+
+    int win_size = 10;
+    cv::calcOpticalFlowPyrLK(
+        image_former, // Previous image
+        image_new, // Next image
+        keypoints_former, // Previous set of corners (from imgA)
+        keypoints_new, // Next set of corners (from imgB)
+        features_found, // Output vector, elements are 1 for tracked
+        cv::noArray(), // Output vector, lists errors (optional)
+        cv::Size(win_size*2+1, win_size*2+1), // Search window size
+        5, // Maximum pyramid level to construct
+        cv::TermCriteria(
+            cv::TermCriteria::MAX_ITER | cv::TermCriteria::EPS,
+            50, // Maximum number of iterations
+            0.3 // Minimum change per iteration
+        )
+    );
+
+} // END OF calculateOpticalFlow.
+
+
+void filterCorners(
+    vector< cv::Point2f > & keypoints_former,
+    vector< cv::Point2f > & keypoints_new,
+    vector<uchar> & features_found    
+){
+    vector< cv::Point2f >::iterator iter_keypoints = keypoints_former.begin();
+    for(vector<uchar>::iterator iter = features_found.begin();
+        iter < features_found.end(); iter++, iter_keypoints++){
+        
+        if((*iter) == false){
+            keypoints_former.erase(iter_keypoints);
+            keypoints_new.erase(iter_keypoints);
+            features_found.erase(iter);
+
+            // Update.
+            iter--;
+            iter_keypoints--;
+        }
+
+    } // END OF for().
+
+} // END OF filterCorners().
+
+
 /**
  * @param image_1, the left RECTIFIED stereo image.
  * @param image_2, the right RECTIFIED stereo image.
@@ -239,7 +330,7 @@ void triangulateStereo(
     //
     cv::Ptr<cv::StereoSGBM> stereo = cv::StereoSGBM::create(
         0, // minDisparity
-        128, // numDisparities, total number of distinct possible disparities
+        64, // numDisparities, total number of distinct possible disparities
              // to be returned. 
         5, // blockSize, usually 3 or 5 would be enough. Always be odd.
             // the larger the value is, the fewer false matches you 
@@ -254,12 +345,12 @@ void triangulateStereo(
            // compute some optimal values for them based on the image
            // resolution and blockSize.
         0, // disp12MaxDiff
-        0, // preFilterCap, a positive numeric limit.
+        1, // preFilterCap, a positive numeric limit.
         15, // uniquessRatio, typical values: 5 ~ 15.
             // speckleWindowSize and speckleRange work together.
-        21, // speckleWindowSize, the size of any small, isolated blobs 
+        11, // speckleWindowSize, the size of any small, isolated blobs 
             // that are substantially different from their surrounding values.
-        2,  // speckleRange, the largest difference between disparities
+        1,  // speckleRange, the largest difference between disparities
             // that will include in the same blob.
             // This value is compared directly to the values of the disparity,
             // then this value will, in effect, be multiplied by 16.
@@ -283,9 +374,11 @@ void triangulateStereo(
     disparity.convertTo(disparity_true, CV_32F, 1.0/16.0, 0.0);
 
     // This is for displaying the disparity image only.
-    // cv::normalize(disparity_true, vdisparity, 0, 256, cv::NORM_MINMAX, CV_8U);
+    cv::normalize(disparity_true, vdisparity, 0, 256, cv::NORM_MINMAX, CV_8U);
     // cv::imshow("Disparity_map", vdisparity);
     // cv::moveWindow("Disparity_map", 670, 0);
+    // cv::imwrite("disparityMap.jpg", vdisparity);
+    // if(cv::waitKey(0) == 27) exit(0);
 
     // Step 2: Depth map.
     cv::reprojectImageTo3D(
@@ -383,6 +476,66 @@ void getEffective3Dkeypoints(
 } // END OF get3Dkeypoints().
 
 
+void getEffective3DCorners(
+    vector< cv::Point2f > & keypoints_former,
+    vector< cv::Point2f > & keypoints_new,
+    cv::Mat image_3D_former,
+    cv::Mat image_3D_new,
+    vector< cv::Vec3f > & keypoints3D_former,
+    vector< cv::Vec3f > & keypoints3D_new
+){
+    
+    cout << "Corners Before: " << keypoints_former.size() << endl;
+    // cout << "Corners_new Before: " << keypoints_new.size() << endl;
+
+    cv::Vec3f point3D_former, point3D_new;
+    int keypoints_sz = keypoints_former.size(); 
+    size_t ix = 0;
+    int count = 0;
+
+    for(vector< cv::Point2f >::iterator iter = keypoints_former.begin();
+        iter < keypoints_former.end();
+        ix++, iter++){
+        // Find the corresponding 3D coordinates of the specific
+        // keypoints[ix].pt.
+        point3D_former = image_3D_former.at<cv::Vec3f>(keypoints_former[ix]);
+        point3D_new = image_3D_new.at<cv::Vec3f>(keypoints_new[ix]);
+        // cout << "point3D_former: " << point3D_former << endl;
+        // cout << "point3D_new: " << point3D_new << endl;
+        
+
+        // Filter out the outliers whose depth value equals to 10000.
+        // || (point3D_new(2) == 10000) 
+        if( (point3D_former(2) == 10000) || (point3D_new(2) == 10000) ) {
+            // Delete the corresponding row of keypoints.
+            //
+            keypoints_former.erase(iter);
+            keypoints_new.erase(iter);
+            
+            // Update.
+            //
+            iter--;
+            ix--;
+            
+            // cout << "descriptors: " << descriptors.at<double>(0) << endl;
+        } else{
+             keypoints3D_former.push_back(point3D_former);
+             keypoints3D_new.push_back(point3D_new);
+        }
+        
+        // // Update.
+        // count++;
+        // cout << "count: " << count << endl;
+
+    }
+    
+    cout << "Corners After: " << keypoints_former.size() << endl;
+    // cout << "descriptors: " << descriptors.size() << endl;
+    cout << "The number of effective 3Dcorners is: " <<  keypoints3D_former.size() << endl;
+
+} // END OF getEffective3DCorners().
+
+
 /**
  * Sort keypoints3D_former and keypoints3D_new in the order
  * according to @param matches.
@@ -432,9 +585,27 @@ void getRelativeTransform(
     //
     cv::Mat affine_relative_3D;
     cv::estimateAffine3D(keypoints3D_former, keypoints3D_new, affine_relative_3D, cv::noArray(), 1, 0.999);
-    // cout << "\naffine_relative_3D: \n" << affine_relative_3D << endl;
+    cout << "\naffine_relative_3D: \n" << affine_relative_3D << endl;
     R_relative = affine_relative_3D.colRange(0, 3);
     t_relative = affine_relative_3D.col(3);
+
+    // cv::Mat objectPoints = cv::Mat::zeros(keypoints3D_former.size(), 1, CV_8UC3);
+    // cv::Mat imagePoints = cv::Mat::zeros(keypoints3D_new.size(), 1, CV_8UC3);
+    // for(size_t ix = 0; ix < keypoints3D_new.size(); ix++){
+    //     objectPoints.at<cv::Vec3f>(ix) = keypoints3D_former[ix];
+    //     imagePoints.at<cv::Vec3f>(ix) = keypoints3D_new[ix];
+    // }
+
+    // cv::solvePnPRansac(
+    //     objectPoints,
+    //     imagePoints,
+    //     cv::noArray(),
+    //     cv::noArray(),
+    //     R_relative,
+    //     t_relative
+    // );
+    
+
     // cout << "\nR_relative: \n" << R_relative
     // cout << "\nt_relative: \n" << t_relative
     // << endl;
@@ -516,6 +687,7 @@ void getTrajectory(
     // the former and the new frames of the left camera.
     // 
     vector< cv::KeyPoint > keypoints_former, keypoints_new;
+    // vector<cv::Point2f> keypoints_former, keypoints_new;
     cv::Mat descriptors_former, descriptors_new;
     vector < cv::DMatch > matches;
 
@@ -530,16 +702,19 @@ void getTrajectory(
     triangulateStereo(image_1_name, image_2_name, Q, image_1_former, image_3D_former);
     cout << "Image size: " << image_1_former.size() << endl;
 
+    // Feature detector + descriptor extractor + matcher.
+    //
     calculateFeatures(image_1_former, keypoints_former, descriptors_former);
-        
     vector< cv::Vec3f > keypoints3D_former, keypoints3D_new;
-    
     getEffective3Dkeypoints(
         keypoints_former, 
         descriptors_former,
         image_3D_former, 
         keypoints3D_former);
 
+    // Harris-corners + optical Flow.
+    //
+    // calculateCorners(image_1_former, keypoints_former);
 
     // Get the total transformation with respect to the reference.
     // 
@@ -570,15 +745,37 @@ void getTrajectory(
         image_2_name = dir_name + "sequences/00/" +   image_2_name;
         triangulateStereo(image_1_name, image_2_name, Q, image_1_new, image_3D_new);
 
+        // Feature detector + descriptor extractor + matcher.
+        //
         calculateFeatures(image_1_new, keypoints_new, descriptors_new);
-
         getEffective3Dkeypoints(
             keypoints_new, 
             descriptors_new,
             image_3D_new, 
             keypoints3D_new);
-
         matchFeatures(descriptors_former, descriptors_new, matches);
+
+
+        // Harris-corners + optical Flow.
+        //
+        // vector<uchar> features_found;
+        // calculateOpticalFlow(
+        //     image_1_former,
+        //     image_1_new,
+        //     keypoints_former,
+        //     keypoints_new,
+        //     features_found
+        // );
+        // filterCorners(keypoints_former, keypoints_new, features_found);
+        // getEffective3DCorners(
+        //     keypoints_former,
+        //     keypoints_new,
+        //     image_3D_former,
+        //     image_3D_new,
+        //     keypoints3D_former,
+        //     keypoints3D_new
+        // );
+
 
         // Calculate the relatvie transformation between the former and the new frames.
         //
